@@ -16,7 +16,11 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 ADMIN_IDS = [int(id) for id in os.environ.get("ADMIN_IDS", "8537079657").split(",")]  # comma-separated
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # e.g., https://your-app.onrender.com
+
+# Webhook URL: set WEBHOOK_URL or RENDER_EXTERNAL_URL
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL") or os.environ.get("RENDER_EXTERNAL_URL")
+if not WEBHOOK_URL:
+    raise ValueError("WEBHOOK_URL or RENDER_EXTERNAL_URL must be set")
 
 # Initialize Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -33,12 +37,83 @@ SELECTING_COUPON_TYPE, SELECTING_QUANTITY, CUSTOM_QUANTITY = range(3)
 WAITING_PAYER_NAME, WAITING_PAYMENT_SCREENSHOT = range(3, 5)
 ENTER_COUPON = 5
 
-# ==================== DATABASE INIT ====================
-def init_db():
-    # Create tables if not exists (run once manually or via migration)
-    pass  # Tables should be created manually (SQL provided below)
+# ==================== DATABASE SCHEMA ====================
+# Run this SQL in Supabase SQL editor:
+"""
+-- Users table
+CREATE TABLE users (
+    user_id BIGINT PRIMARY KEY,
+    username TEXT,
+    first_name TEXT,
+    joined_at TIMESTAMP DEFAULT NOW()
+);
 
-init_db()
+-- Coupons table (voucher codes)
+CREATE TABLE coupons (
+    id SERIAL PRIMARY KEY,
+    type TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    is_used BOOLEAN DEFAULT FALSE,
+    used_by BIGINT,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Orders table
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    order_id TEXT UNIQUE,
+    user_id BIGINT,
+    coupon_type TEXT,
+    quantity INTEGER,
+    total_price DECIMAL(10,2),
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Prices table with min_quantity
+CREATE TABLE prices (
+    coupon_type TEXT PRIMARY KEY,
+    price_1 DECIMAL(10,2),
+    price_5 DECIMAL(10,2),
+    price_10 DECIMAL(10,2),
+    price_20 DECIMAL(10,2),
+    min_quantity INTEGER DEFAULT 1
+);
+
+-- Discount codes
+CREATE TABLE discount_codes (
+    id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    value DECIMAL(10,2) NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_by BIGINT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP
+);
+
+-- Settings
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+
+-- Insert default prices
+INSERT INTO prices (coupon_type, price_1, price_5, price_10, price_20, min_quantity) VALUES
+    ('500', 10, 45, 80, 150, 1),
+    ('1000', 18, 85, 160, 300, 1),
+    ('2000', 35, 160, 300, 550, 1),
+    ('4000', 60, 280, 500, 950, 1)
+ON CONFLICT (coupon_type) DO UPDATE SET
+    price_1 = EXCLUDED.price_1,
+    price_5 = EXCLUDED.price_5,
+    price_10 = EXCLUDED.price_10,
+    price_20 = EXCLUDED.price_20,
+    min_quantity = EXCLUDED.min_quantity;
+
+-- Insert default bot status
+INSERT INTO settings (key, value) VALUES ('bot_status', 'on') ON CONFLICT DO NOTHING;
+"""
 
 # ==================== HELPER FUNCTIONS ====================
 def get_main_menu():
@@ -467,9 +542,8 @@ async def admin_accept_decline(update: Update, context: ContextTypes.DEFAULT_TYP
 
         supabase.table("orders").update({"status": "completed"}).eq("order_id", order_id).execute()
 
-        # Mark discount code as used if present
-        # Note: we don't have discount info here; we could store discount_code in order if needed.
-        # For now, we skip marking discount as used (could be added later).
+        # Mark discount code as used if present (if we stored it in order, we'd do it here)
+        # For now, we don't have discount info in this callback.
 
         codes_text = "\n".join(codes)
         await context.bot.send_message(
@@ -781,5 +855,5 @@ if __name__ == "__main__":
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
         url_path=TELEGRAM_TOKEN,
-        webhook_url=WEBHOOK_URL + "/" + TELEGRAM_TOKEN
+        webhook_url=f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
     )
