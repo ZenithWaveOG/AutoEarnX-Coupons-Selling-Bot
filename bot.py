@@ -155,7 +155,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'first_name': user.first_name
     }).execute()
 
-    stock_msg = "✏️ PROXY CODE SHOP\n━━━━━━━━━━━━━━\n📊 Current Stock\n\n"
+    stock_msg = "✏️ AUTOEARNX CODE SHOP\n━━━━━━━━━━━━━━\n📊 Current Stock\n\n"
     for ct in COUPON_TYPES:
         count = supabase.table('coupons').select('*', count='exact').eq('type', ct).eq('is_used', False).execute()
         stock = count.count if hasattr(count, 'count') else 0
@@ -207,10 +207,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(disclaimer)
     elif text == "🆘 Support":
-        await update.message.reply_text("🆘 Support Contact:\n━━━━━━━━━━━━━━\n@ProxySupportChat_bot")
+        await update.message.reply_text("🆘 Support Contact:\n━━━━━━━━━━━━━━\n@AutoEarnX_Support")
     elif text == "📢 Our Channels":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("@PROXY_LOOTERS", url="https://t.me/PROXY_LOOTERS")]
+            [InlineKeyboardButton("@AutoEarnX_Shein", url="https://t.me/AutoEarnX_Shein")]
         ])
         await update.message.reply_text("📢 Join our official channels for updates and deals:", reply_markup=keyboard)
     else:
