@@ -595,17 +595,33 @@ async def admin_message_handler(update: Update, context: ContextTypes.DEFAULT_TY
     photo = update.message.photo[-1] if update.message.photo else None
 
     if context.user_data.get("broadcast"):
-        users = supabase.table("users").select("user_id").execute()
-        success = 0
-        for u in users.data:
-            try:
-                await context.bot.send_message(u["user_id"], text)
-                success += 1
-            except:
-                pass
-        await update.message.reply_text(f"Broadcast sent to {success}/{len(users.data)} users.")
+    msg_text = text
+    if not msg_text:
+        await update.message.reply_text("❌ Broadcast message cannot be empty.")
         context.user_data.pop("broadcast", None)
         return
+
+    # Fetch all users
+    users = supabase.table("users").select("user_id").execute()
+    if not users.data:
+        await update.message.reply_text("No users found in database.")
+        context.user_data.pop("broadcast", None)
+        return
+
+    total = len(users.data)
+    success = 0
+    failed = 0
+    for u in users.data:
+        try:
+            await context.bot.send_message(chat_id=u["user_id"], text=msg_text)
+            success += 1
+        except Exception as e:
+            failed += 1
+            logger.error(f"Broadcast failed for user {u['user_id']}: {e}")
+
+    await update.message.reply_text(f"📢 Broadcast sent.\n✅ Success: {success}\n❌ Failed: {failed}\n👥 Total users: {total}")
+    context.user_data.pop("broadcast", None)
+    return
 
     if context.user_data.get("awaiting_qr"):
         if photo:
