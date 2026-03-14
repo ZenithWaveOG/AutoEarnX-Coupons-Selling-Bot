@@ -160,7 +160,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
 
-    if user.id in ADMIN_IDS and context.user_data.get("admin_action"):
+    if user.id in ADMIN_IDS and (
+        context.user_data.get("admin_action") or 
+        context.user_data.get("broadcast") or 
+        context.user_data.get("awaiting_qr")
+    ):
         await admin_message_handler(update, context)
         return
 
