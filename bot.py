@@ -594,35 +594,37 @@ async def admin_message_handler(update: Update, context: ContextTypes.DEFAULT_TY
     text = update.message.text
     photo = update.message.photo[-1] if update.message.photo else None
 
+    # --- Broadcast handling ---
     if context.user_data.get("broadcast"):
-    msg_text = text
-    if not msg_text:
-        await update.message.reply_text("❌ Broadcast message cannot be empty.")
+        msg_text = text
+        if not msg_text:
+            await update.message.reply_text("❌ Broadcast message cannot be empty.")
+            context.user_data.pop("broadcast", None)
+            return
+
+        # Fetch all users
+        users = supabase.table("users").select("user_id").execute()
+        if not users.data:
+            await update.message.reply_text("No users found in database.")
+            context.user_data.pop("broadcast", None)
+            return
+
+        total = len(users.data)
+        success = 0
+        failed = 0
+        for u in users.data:
+            try:
+                await context.bot.send_message(chat_id=u["user_id"], text=msg_text)
+                success += 1
+            except Exception as e:
+                failed += 1
+                logger.error(f"Broadcast failed for user {u['user_id']}: {e}")
+
+        await update.message.reply_text(f"📢 Broadcast sent.\n✅ Success: {success}\n❌ Failed: {failed}\n👥 Total users: {total}")
         context.user_data.pop("broadcast", None)
         return
 
-    # Fetch all users
-    users = supabase.table("users").select("user_id").execute()
-    if not users.data:
-        await update.message.reply_text("No users found in database.")
-        context.user_data.pop("broadcast", None)
-        return
-
-    total = len(users.data)
-    success = 0
-    failed = 0
-    for u in users.data:
-        try:
-            await context.bot.send_message(chat_id=u["user_id"], text=msg_text)
-            success += 1
-        except Exception as e:
-            failed += 1
-            logger.error(f"Broadcast failed for user {u['user_id']}: {e}")
-
-    await update.message.reply_text(f"📢 Broadcast sent.\n✅ Success: {success}\n❌ Failed: {failed}\n👥 Total users: {total}")
-    context.user_data.pop("broadcast", None)
-    return
-
+    # --- QR code update handling ---
     if context.user_data.get("awaiting_qr"):
         if photo:
             file_id = photo.file_id
@@ -633,6 +635,7 @@ async def admin_message_handler(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text("Please send an image.")
         return
 
+    # --- Admin actions (add, remove, free, price, minqty, gen_discount) ---
     admin_action = context.user_data.get("admin_action")
     if not admin_action:
         return
@@ -721,7 +724,6 @@ async def admin_message_handler(update: Update, context: ContextTypes.DEFAULT_TY
         except ValueError:
             await update.message.reply_text("Invalid number.")
         context.user_data.pop("admin_action", None)
-
 # ==================== CONVERSATION HANDLERS ====================
 custom_qty_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(quantity_callback, pattern="^qty_custom$")],
